@@ -1,217 +1,158 @@
-# Physiological Signal Classification: Stress Detection and Emotion Recognition
+from pathlib import Path
 
-Research code for physiological-signal classification using two distinct datasets and experimental tracks:
+readme = r"""# Physiological Emotion Recognition from Emotional Video Stimuli
 
-1. **Wearable stress/rest classification** using Empatica E4 recordings from PhysioNet.
-2. **Video-elicited emotion recognition** using ECG, EDA, skin temperature, and accelerometer recordings from the Mendeley Data corpus.
+A reproducible machine-learning benchmark for classifying **NEUTRAL**, **POSITIVE/RELAXING**, and **ANXIETY** stimulus conditions from ECG and electrodermal activity (EDA) signals.
 
-The repository is intended for research and reproducibility. These are separate experiments with different sensors, labels, data formats, and evaluation protocols. Their results should not be compared as if they came from the same benchmark.
+This repository accompanies the conference manuscript:
 
-## Research tracks at a glance
+> **Physiological Emotion Recognition from Emotional Video Stimuli Using Machine Learning Models**  
+> Rohullah Iqbal, Awais Khan, and Yunyoung Nam  
+> Department of Computer Science and Engineering / ICT Convergence, Soonchunhyang University, South Korea.
 
-| Track | Dataset | Task | Main approach |
-|---|---|---|---|
-| A | [PhysioNet Wearable Device Dataset](https://physionet.org/content/wearable-device-dataset/1.0.1/) | Binary stress vs. rest | Handcrafted features and CNN-based feature learning |
-| B | [Physiological Responses to Emotional Video Stimuli](https://data.mendeley.com/datasets/8dr667fxhz/1) | Three-class emotion recognition | ECG/EDA handcrafted features and gradient-boosted classifiers |
+The main implementation is the Jupyter notebook `FINAL_Normalization_and_without.ipynb`.
 
-## Track A: Wearable stress/rest classification
+## Dataset
 
-### Dataset
+- **Dataset:** [Physiological Responses to Emotional Video Stimuli: ECG, EDA, and Temperature Data](https://data.mendeley.com/datasets/8dr667fxhz/1)
+- **DOI:** [10.17632/8dr667fxhz.1](https://doi.org/10.17632/8dr667fxhz.1)
+- **License:** CC BY 4.0, as listed by the Mendeley Data record.
+- **Dataset paper:** Pataca, A. O., Al-Jumaili, S., Coelho, P. J., Garcia, N. M., Albuquerque, C., & Pires, I. M. (2026). *Physiological responses to emotional video stimuli: ECG, EDA, and temperature data*. Data in Brief, 66, 112720. https://doi.org/10.1016/j.dib.2026.112720
 
-**Dataset:** Hongn, A., Bosch, F., Prado, L., & Bonomini, P. (2025). *Wearable Device Dataset from Induced Stress and Structured Exercise Sessions*, version 1.0.1. PhysioNet. [Dataset DOI](https://doi.org/10.13026/he0v-tf17).
+The dataset contains synchronized ECG, EDA, skin-temperature, and accelerometer recordings from 44 adult participants across 18 video stimuli. Each participant folder contains files such as `bitalino_1.txt` through `bitalino_18.txt`, as well as participant metadata.
 
-**Associated publication:** Hongn, A., Bosch, F., Prado, L. E., Ferrández, J. M., & Bonomini, M. P. (2025). “Wearable Physiological Signals under Acute Stress and Exercise Conditions.” *Scientific Data*. [https://doi.org/10.1038/s41597-025-04845-9](https://doi.org/10.1038/s41597-025-04845-9).
+**Do not commit the raw dataset to this repository.** Download it from Mendeley Data and configure the local dataset path in the notebook. Follow the dataset license and citation requirements.
 
-The dataset includes Empatica E4 signals such as BVP, EDA, HR, IBI, skin temperature, accelerometry, and protocol event tags. The stress/rest scripts use the `STRESS` recordings; they do not claim to classify all exercise conditions.
+## Task defined in this study
 
-### Scripts
+The notebook uses three selected video conditions:
 
-| Script | Purpose |
-|---|---|
-| `stress_rest_pipleine_v3.py` | Main paper-aligned handcrafted-feature stress/rest baseline |
-| `stress_rest_pipleine_v2.py` | Earlier version of the handcrafted-feature baseline |
-| `cnn_baseline_feature_comparison.py` | CNN feature-learning comparison, with optional handcrafted-feature comparison |
-| `cnn_stress_contribution_v2.py` | CNN experiments including subject-mixed CV, leave-one-subject-out (LOSO), and protocol-version transfer |
+| Video ID | Study label | Numeric label |
+|---:|---|---:|
+| 1 | NEUTRAL | 0 |
+| 3 | POSITIVE_RELAXING | 1 |
+| 5 | ANXIETY | 2 |
 
-The filename spelling `pipleine` is retained from the supplied scripts.
+Participants are retained only when all three selected recordings are successfully processed. The manuscript reports 43 complete participants after excluding participant 27 because the selected recordings could not be parsed into numeric samples. This yields **129 trials** (43 participants × 3 selected trials), with 43 trials per class.
 
-### Method summary
+**Important interpretation:** the labels represent the intended emotional condition of each selected video. They are not participant self-reports. Because one selected video represents each class, results should be described as classification of these three stimulus conditions, not proof of generalization to all neutral, relaxing, or anxiety-inducing content.
 
-The handcrafted baseline reads Empatica CSV signals and event tags, segments the stress protocol into task/rest blocks, filters signals, extracts a 13-feature set aligned with the associated paper, applies intra-participant normalization, and evaluates classifiers using cross-validation. Random oversampling is applied within the training pipeline.
+## Methodology implemented in the notebook
 
-The CNN experiments learn representations from physiological windows and evaluate the resulting features using classical classifiers. Available experiments include subject-mixed evaluation, LOSO, and cross-protocol transfer. Check each script's `--help` output for the supported arguments.
+1. **Load raw BITalino recordings.** Parse timestamped text files and extract ECG, EDA, temperature, and acceleration channels.
+2. **Explore signals.** Plot raw physiological channels for an example participant and summarize signal statistics.
+3. **Preprocess each trial.** Trim 2 seconds from both ends, interpolate missing values, and apply channel-specific filtering.
+4. **Extract features.** Compute statistical and temporal features over the full trimmed trial and, when long enough, over its early, middle, and late thirds. ECG features include signal statistics and heart-rate/HRV descriptors; EDA features include tonic/phasic and skin-conductance-response (SCR) descriptors. The notebook initially creates a 456-feature all-signal table.
+5. **Select ECG + EDA.** Keep ECG- and EDA-related features for the primary experiment, excluding temperature- and accelerometer-derived features.
+6. **Compare normalization choices.** The notebook supports no subject normalization, subject-wise centering, and subject-wise z-score normalization. The configured primary setting is `zscore`.
+7. **Train and evaluate models.** Use median imputation fitted inside each fold and `StratifiedGroupKFold` with participant identity as the group. The configured evaluation is 5 folds × 5 repeats.
+8. **Report results.** Compare accuracy, balanced accuracy, macro-F1, pooled confusion matrices, and class-wise performance.
 
-The handcrafted implementation is a **paper-aligned reproduction**, not a guaranteed bit-for-bit replication, because not every low-level parameter is specified in the paper.
+### Models
 
-## Track B: Video-elicited emotion recognition
+The notebook attempts to benchmark:
+- CatBoost
+- LightGBM
+- XGBoost
+- Histogram-based Gradient Boosting
+- TabPFN (optional; availability depends on the installed package and its setup)
 
-### Dataset
+The saved notebook output shown in the submitted file contains completed results for CatBoost, LightGBM, XGBoost, and Histogram-based Gradient Boosting. TabPFN is not present in that recorded run.
 
-**Dataset:** Pataca, A. O., Albuquerque, C., & Pires, I. (2025). *Physiological Responses to Emotional Video Stimuli: ECG, EDA, and Temperature Data*, version 1. [Mendeley Data](https://data.mendeley.com/datasets/8dr667fxhz/1) · [DOI: 10.17632/8dr667fxhz.1](https://doi.org/10.17632/8dr667fxhz.1).
+## Results recorded in the submitted notebook
 
-The dataset contains synchronized physiological recordings from 44 adult participants viewing 18 emotionally evocative video clips. Signals include ECG, EDA, skin temperature, and accelerometer data, recorded using BITalino devices. The dataset labels represent the intended elicitation conditions of the stimuli; they should not be described as participants' self-reported emotions unless supported by additional annotation.
+The following values are read from the notebook's saved execution output. They are not a guarantee that a fresh run on another environment will reproduce the exact values.
 
-The current three-class experiment retains participants with usable recordings for all three selected videos, yielding **43 participants and 129 trials**:
+| Model | Accuracy (%) | Balanced accuracy (%) | Macro-F1 (%) |
+|---|---:|---:|---:|
+| XGBoost | 88.44 ± 7.65 | 88.44 ± 7.65 | 88.50 ± 7.51 |
+| CatBoost | 88.19 ± 5.38 | 88.19 ± 5.38 | 88.19 ± 5.35 |
+| LightGBM | 87.50 ± 6.37 | 87.50 ± 6.37 | 87.49 ± 6.40 |
+| Histogram-based Gradient Boosting | 87.20 ± 6.18 | 87.20 ± 6.18 | 87.15 ± 6.22 |
 
-| Video ID | Class label |
-|---:|---|
-| 1 | `NEUTRAL` |
-| 3 | `POSITIVE_RELAXING` |
-| 5 | `ANXIETY` |
+Values are mean ± standard deviation across the 25 fold evaluations. The stored pooled confusion matrix for XGBoost contains 645 predictions across five repetitions:
 
-### Notebook
+| True class | Predicted neutral | Predicted positive/relaxing | Predicted anxiety |
+|---|---:|---:|---:|
+| NEUTRAL | 181 | 1 | 33 |
+| POSITIVE_RELAXING | 5 | 208 | 2 |
+| ANXIETY | 33 | 0 | 182 |
 
-`FINAL_Normalization_and_without.ipynb`
+The largest confusion is between NEUTRAL and ANXIETY. POSITIVE_RELAXING is the most consistently classified class in this saved run.
 
-The notebook implements an end-to-end workflow including:
+## Evaluation and normalization caveat
 
-1. Loading raw BITalino `.txt` files.
-2. Inspecting ECG, EDA, temperature, and accelerometer signals.
-3. Trimming trial edges, interpolating missing samples, filtering, and resampling selected channels.
-4. Extracting ECG/HRV and EDA/SCR features, plus temperature and accelerometer descriptors.
-5. Building a 456-feature representation and selecting the 324 ECG+EDA features (116 ECG and 208 EDA features) for the primary experiment.
-6. Exploring feature distributions, correlations, and PCA projections.
-7. Comparing no normalization, centering, or participant-wise z-score normalization, depending on the configuration.
-8. Evaluating tabular classifiers using stratified group 5-fold cross-validation repeated five times, with participant identity as the grouping variable.
-9. Reporting accuracy, balanced accuracy, macro-F1, confusion matrices, and class-wise results.
+The notebook uses participant-wise normalization calculated from each participant's selected recordings **before** cross-validation. This does not use class labels, and the participant groups remain disjoint between train and test folds. However, normalization statistics for a held-out participant are computed using that participant's available recordings, including the selected trials that are later evaluated. This is a **subject-disjoint, transductive normalization** protocol, not a strict inductive protocol for a completely unseen participant with no participant-specific calibration data.
 
-The notebook includes CatBoost, LightGBM, XGBoost, scikit-learn histogram-based gradient boosting, and optional TabPFN support, subject to installed packages and the notebook configuration.
+This distinction should be reported clearly. For a stronger deployment-oriented evaluation, add a strict inductive baseline that does not use the held-out participant's other trials to estimate normalization statistics. Also consider leave-one-subject-out evaluation and validation on additional videos per emotion category.
 
-### Manuscript
+## Requirements
 
-The repository accompanies the manuscript:
-
-**“Physiological Emotion Recognition from Emotional Video Stimuli Using Machine Learning Models”**  
-Authors listed in the manuscript: Rohullah Iqbal, Awais Khan, and Yunyoung Nam.
-
-The manuscript reports a subject-disjoint benchmark on 43 participants and 129 trials using 324 handcrafted ECG+EDA features. Its reported best ECG+EDA result is **88.80% ± 5.90% balanced accuracy** for histogram-based gradient boosting over 25 held-out evaluations. See the manuscript itself for full experimental details and results.
-
-**Important evaluation qualification:** participant-wise normalization estimates each participant's statistics from that participant's unlabeled recordings, including recordings that may be used for held-out prediction. Therefore, this is a subject-disjoint evaluation with participant-wise transductive normalization, not strict inductive generalization where no target-participant data are available before prediction. The emotion labels are based on the intended stimulus condition, not participant self-reports.
-
-The manuscript is included as a research artifact/reference. Update this section with a DOI, conference, or publication status only when those details are confirmed.
-
-## Setup
-
-Use a separate virtual environment if the two tracks need different package versions. Python 3.10 or 3.11 is a reasonable starting point, but confirm compatibility with your installed versions of PyTorch, TabPFN, and the other packages.
-
-### Core packages
+The notebook uses Python with the following core packages:
 
 ```bash
-pip install numpy pandas scipy scikit-learn imbalanced-learn matplotlib
+pip install numpy pandas matplotlib scipy scikit-learn jupyter
 ```
 
-For Track A, install optional model packages as needed:
-
-```bash
-pip install xgboost neurokit2
-```
-
-Install a compatible PyTorch build using the official selector: https://pytorch.org/get-started/locally/
-
-For Track B, install the classifiers you want to evaluate:
+Optional model packages:
 
 ```bash
 pip install catboost lightgbm xgboost
 ```
 
-TabPFN is optional and may require additional setup or license acceptance. If you do not intend to use it, leave it disabled in the notebook configuration.
+TabPFN installation and use can depend on its current package requirements and authentication/licensing workflow. Install and configure it according to the official TabPFN documentation if you want to include it.
 
-## Data setup and privacy
+## Run the notebook
 
-Download the datasets from their official repositories and keep them outside version control. **Do not upload raw physiological recordings to GitHub.** Instead, link to the official dataset pages and follow their respective license and attribution requirements.
+1. Download and extract the dataset from [Mendeley Data](https://data.mendeley.com/datasets/8dr667fxhz/1).
+2. Place the extracted participant folders in a local data directory.
+3. Open `FINAL_Normalization_and_without.ipynb` in Jupyter or Google Colab.
+4. Update `DATASET_ROOT` in the configuration cell to the directory containing the participant folders.
+5. Run the notebook from top to bottom.
+6. Check the reported participant count, missing/failed recordings, feature counts, available models, and saved evaluation output before interpreting results.
 
-Example local project structure:
+Example Windows path:
+
+```python
+DATASET_ROOT = Path(r"D:\path\to\Physiological Responses dataset")
+```
+
+The notebook's current path is specific to the original development machine and must be changed on another computer.
+
+## Suggested repository structure
 
 ```text
-repository/
+physiological-emotion-recognition/
 ├── README.md
+├── FINAL_Normalization_and_without.ipynb
+├── Rohullah_Iqbal_Conference_Manuscript.pdf
 ├── requirements.txt
 ├── .gitignore
-├── stress_rest_pipleine_v3.py
-├── stress_rest_pipleine_v2.py
-├── cnn_baseline_feature_comparison.py
-├── cnn_stress_contribution_v2.py
-├── FINAL_Normalization_and_without.ipynb
-├── data/                   # local only; do not commit raw data
-│   ├── Wearable_Dataset/
-│   └── Physiological_Responses_dataset/
-├── results/                # generated experiment outputs
-└── manuscript/             # optional; only share if permitted
+└── data/
+    └── README.md   # instructions/link only; do not commit raw recordings
 ```
 
-Add the data and large generated artifacts to `.gitignore`, for example:
+## Reproducibility notes
 
-```gitignore
-data/
-results/
-*.zip
-*.7z
-*.rar
-__pycache__/
-.ipynb_checkpoints/
-.venv/
-venv/
-.env
-```
+- Set and report the random seed, fold count, repeat count, normalization mode, and package versions.
+- Keep all recordings from a participant in the same cross-validation partition.
+- Fit imputation and any learned preprocessing only on the training fold.
+- Report the exact number of participants/trials retained and any parsing failures.
+- Preserve the distinction between stimulus-intended labels and self-reported emotions.
+- Avoid presenting results from the same selected videos as evidence of broad emotion generalization.
 
-If you choose to include the manuscript PDF in the public repository, make sure all co-authors and any conference or publisher rules permit public sharing.
+## Citation
 
-## Running the scripts
+If you use the dataset, cite the dataset record and its associated data article:
 
-### Track A: handcrafted stress/rest baseline
+> Pataca, A. O., Al-Jumaili, S., Coelho, P. J., Garcia, N. M., Albuquerque, C., & Pires, I. M. (2026). *Physiological responses to emotional video stimuli: ECG, EDA, and temperature data*. Data in Brief, 66, 112720. https://doi.org/10.1016/j.dib.2026.112720
 
-Pass `--root` the directory that directly contains `STRESS/`.
-
-```bash
-python stress_rest_pipleine_v3.py --root "data/Wearable_Dataset" --output "results/paper_baseline"
-```
-
-### Track A: CNN LOSO experiment
-
-```bash
-python cnn_stress_contribution_v2.py --root "data/Wearable_Dataset" --output "results/cnn_loso" --experiment loso
-```
-
-### Track A: protocol transfer
-
-```bash
-python cnn_stress_contribution_v2.py --root "data/Wearable_Dataset" --output "results/v1_to_v2" --experiment v1_to_v2
-```
-
-Check available arguments before running:
-
-```bash
-python stress_rest_pipleine_v3.py --help
-python cnn_baseline_feature_comparison.py --help
-python cnn_stress_contribution_v2.py --help
-```
-
-### Track B: emotion recognition notebook
-
-1. Download and extract the Mendeley dataset locally.
-2. Open `FINAL_Normalization_and_without.ipynb`.
-3. Edit `DATASET_ROOT` in the configuration cell so it points to the extracted dataset directory containing participant folders.
-4. Run the notebook from top to bottom.
-5. Check the printed participant count, class counts, selected feature counts, skipped models, and cross-validation results before reporting results.
-
-The notebook's current local Windows path is only an example from the development environment; replace it with your own path.
-
-## Evaluation and reproducibility notes
-
-- **Keep participants grouped.** For Track B, all trials from one participant must remain in the same fold. For Track A, distinguish subject-mixed results from LOSO results.
-- **Normalization protocol matters.** Participant-wise normalization can use unlabeled test-participant recordings. Report this explicitly and do not call it strict inductive unseen-subject evaluation.
-- **Fit learned preprocessing on training folds.** Imputation, feature selection based on labels, resampling, and other learned transformations must be fitted only on training data.
-- **Report more than accuracy.** Include balanced accuracy, macro-F1, per-class metrics, confusion matrices, and variability across folds or repetitions.
-- **Avoid unsupported comparisons.** Results from different datasets, sensor systems, label definitions, or cross-validation protocols are not directly comparable.
-- **Re-run experiments before publishing metrics.** This README records the results stated in the supplied manuscript; it does not guarantee that a fresh environment will reproduce them exactly.
-
-## References
-
-1. Hongn, A., Bosch, F., Prado, L. E., Ferrández, J. M., & Bonomini, M. P. (2025). *Wearable Physiological Signals under Acute Stress and Exercise Conditions*. Scientific Data. https://doi.org/10.1038/s41597-025-04845-9
-2. Hongn, A., Bosch, F., Prado, L., & Bonomini, P. (2025). *Wearable Device Dataset from Induced Stress and Structured Exercise Sessions*, v1.0.1. PhysioNet. https://doi.org/10.13026/he0v-tf17
-3. Pataca, A. O., Albuquerque, C., & Pires, I. (2025). *Physiological Responses to Emotional Video Stimuli: ECG, EDA, and Temperature Data*, version 1. Mendeley Data. https://doi.org/10.17632/8dr667fxhz.1
-4. Iqbal, R., Khan, A., & Nam, Y. *Physiological Emotion Recognition from Emotional Video Stimuli Using Machine Learning Models*. Manuscript supplied with this project. Add publication metadata when confirmed.
+Please also cite the dataset DOI: https://doi.org/10.17632/8dr667fxhz.1
 
 ## Code license
 
-No code license is specified here. Add a `LICENSE` file before describing the code as open-source or granting reuse permissions. Dataset licenses are separate from the code license.
+No separate license for the code is specified here. Add a `LICENSE` file before inviting reuse, and choose a license appropriate for your intended sharing terms. The dataset's CC BY 4.0 license does not automatically determine the license for your code or manuscript.
+"""
+out = Path("/mnt/data/README_emotion_recognition.md")
+out.write_text(readme, encoding="utf-8")
+print(f"Created {out} ({len(readme.splitlines())} lines)")
